@@ -173,6 +173,41 @@ h4 { font-size: 1.1rem !important; font-weight: 700 !important; color: #0d3b66 !
     border: 2px dashed #74b9ff !important;
     border-radius: 12px !important;
 }
+            
+/* ===== FORCE INPUT WHITE (Fix dark theme issue) ===== */
+
+div[data-baseweb="input"] input,
+div[data-baseweb="base-input"] input,
+input[type="number"],
+input[type="text"],
+textarea {
+    background-color: white !important;
+    color: #1a1a2e !important;
+    border-radius: 8px !important;
+}
+
+/* ===== FIX BUTTON DARK MODE TEXT ===== */
+
+button[kind="primary"],
+button[kind="secondary"] {
+    color: white !important;
+}
+            
+/* ===== FIX FILE UPLOADER BROWSE BUTTON ===== */
+
+[data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg, #0984e3, #0652dd) !important;
+    color: white !important;
+    border-radius: 8px !important;
+    border: none !important;
+    font-weight: 600 !important;
+}
+
+/* Hover */
+[data-testid="stFileUploader"] button:hover {
+    background: linear-gradient(135deg, #0652dd, #023dd4) !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -289,154 +324,294 @@ with t1:
     DEFAULTS = {'DO': 7.0, 'pH': 7.0, 'ORP': 200.0, 'Cond': 350.0, 'Temp': 27.0, 'WQI': 70.0}
     inputs = {}
 
-    # Input layout
     col1, col2, col3 = st.columns(3)
     with col1:
-        inputs['DO'] = st.number_input("Dissolved Oxygen (DO)", min_value=0.0, max_value=15.0,
-                                       value=DEFAULTS['DO'], format="%.2f")
+        inputs['DO'] = st.number_input("Dissolved Oxygen (DO)", 0.0, 15.0, DEFAULTS['DO'])
     with col2:
-        inputs['pH'] = st.number_input("pH Level", min_value=0.0, max_value=14.0,
-                                       value=DEFAULTS['pH'], format="%.2f")
+        inputs['pH'] = st.number_input("pH Level", 0.0, 14.0, DEFAULTS['pH'])
     with col3:
-        inputs['ORP'] = st.number_input("ORP", min_value=-500.0, max_value=500.0,
-                                        value=DEFAULTS['ORP'], format="%.2f")
+        inputs['ORP'] = st.number_input("ORP", -500.0, 500.0, DEFAULTS['ORP'])
 
     col4, col5, col6 = st.columns(3)
     with col4:
-        inputs['Cond'] = st.number_input("Conductivity (Cond)", min_value=0.0, max_value=2000.0,
-                                         value=DEFAULTS['Cond'], format="%.2f")
+        inputs['Cond'] = st.number_input("Conductivity", 0.0, 2000.0, DEFAULTS['Cond'])
     with col5:
-        inputs['Temp'] = st.number_input("Temperature", min_value=0.0, max_value=50.0,
-                                         value=DEFAULTS['Temp'], format="%.2f")
+        inputs['Temp'] = st.number_input("Temperature", 0.0, 50.0, DEFAULTS['Temp'])
     with col6:
-        inputs['WQI'] = st.number_input("Water Quality Index (WQI)", min_value=0.0, max_value=100.0,
-                                        value=DEFAULTS['WQI'], format="%.2f")
+        inputs['WQI'] = st.number_input("Water Quality Index", 0.0, 100.0, DEFAULTS['WQI'])
 
     predict_btn = st.button("Predict Water Quality")
 
-    # Fixed result placeholder (prevents overlapping)
     result_placeholder = st.empty()
 
     if predict_btn:
 
-        # Correct feature order for model
-        X = pd.DataFrame(
-            [[inputs[f] for f in MODEL_FEATURES]],
-            columns=MODEL_FEATURES
-        )
+        # ===== Create feature dataframe =====
+        X = pd.DataFrame({
+            "DO":[inputs["DO"]],
+            "pH":[inputs["pH"]],
+            "ORP":[inputs["ORP"]],
+            "Cond":[inputs["Cond"]],
+            "Temp":[inputs["Temp"]],
+            "WQI":[inputs["WQI"]],
+        })
 
-        prediction = model.predict(X)[0]
+        # ===== ML Prediction =====
+        prediction = int(model.predict(X)[0])
         probabilities = model.predict_proba(X)[0]
-        label = STATUS_MAP.get(int(prediction), str(prediction))
+
+        # ===== Hybrid Risk Rule Engine =====
+        risk_score = 0
+
+        # DO Risk
+        if inputs["DO"] < 3:
+            risk_score += 3
+        elif inputs["DO"] < 5:
+            risk_score += 1
+
+        # Conductivity Risk
+        if inputs["Cond"] > 900:
+            risk_score += 3
+        elif inputs["Cond"] > 500:
+            risk_score += 1
+
+        # Temperature Risk
+        if inputs["Temp"] > 35:
+            risk_score += 2
+        elif inputs["Temp"] > 29:
+            risk_score += 1
+
+        # pH Risk
+        if inputs["pH"] > 9 or inputs["pH"] < 5:
+            risk_score += 2
+        elif inputs["pH"] > 8:
+            risk_score += 1
+
+        # WQI Risk
+        if inputs["WQI"] < 25:
+            risk_score += 3
+        elif inputs["WQI"] < 55:
+            risk_score += 1
+        # ===== Final Safe Decision =====
+        if risk_score >= 5:
+            prediction = 4
+        elif risk_score >= 3:
+            prediction = max(prediction,3)
+        elif risk_score >= 1:
+            prediction = max(prediction,2)
+
+        label = STATUS_MAP[prediction]
 
         with result_placeholder.container():
 
             st.markdown("### 🎯 Prediction Result")
 
-            if int(prediction) >= 3:
-                st.error(f"**Water Quality: {label}**")
-            elif int(prediction) == 2:
-                st.warning(f"**Water Quality: {label}**")
+            if prediction >= 3:
+                st.error(f"Water Quality: {label}")
+            elif prediction == 2:
+                st.warning(f"Water Quality: {label}")
             else:
-                st.success(f"**Water Quality: {label}**")
+                st.success(f"Water Quality: {label}")
 
-            st.markdown("### 📊 Model Confidence")
+            # # ===== Confidence Chart =====
+            # st.markdown("### 📊 Model Confidence")
 
-            prob_df = pd.DataFrame({
-                "Status": [STATUS_MAP[i] for i in range(len(probabilities))],
-                "Probability": (probabilities * 100).round(1)
-            })
+            # prob_df = pd.DataFrame({
+            #     "Status":[STATUS_MAP[i] for i in range(len(probabilities))],
+            #     "Probability":(probabilities*100).round(1)
+            # })
 
-            fig = go.Figure(go.Bar(
-                x=prob_df["Status"],
-                y=prob_df["Probability"],
-                text=prob_df["Probability"].apply(lambda x: f"{x:.1f}%"),
-                textposition="outside",
-                marker_color=['#00b894', '#0984e3', '#f39c12', '#e17055', '#d63031']
-            ))
+            # fig = go.Figure(go.Bar(
+            #     x=prob_df["Status"],
+            #     y=prob_df["Probability"],
+            #     text=prob_df["Probability"].astype(str)+"%",
+            #     textposition="outside",
+            #     marker_color=['#00b894','#0984e3','#f39c12','#e17055','#d63031']
+            # ))
 
-            fig.update_layout(
-                title="Prediction Confidence per Class",
-                yaxis_title="Probability (%)",
-                yaxis=dict(range=[0, 100])
-            )
+            # fig.update_layout(
+            #     yaxis_title="Probability %",
+            #     yaxis=dict(range=[0,100])
+            # )
 
-            st.plotly_chart(fig, use_container_width=True)
+            # st.plotly_chart(fig,use_container_width=True)
 
 # ======================================================
 # ================= BULK ===============================
 # ======================================================
 with t2:
-    file = st.file_uploader("Upload CSV / Excel / JSON / SQLite",
-                            type=["csv", "xlsx", "json", "db"])
 
-    if file:
-        try:
-            if file.name.endswith(".csv"):
-                df = pd.read_csv(file)
-            elif file.name.endswith(".xlsx"):
-                df = pd.read_excel(file)
-            elif file.name.endswith(".json"):
-                df = pd.read_json(file)
-            elif file.name.endswith(".db"):
-                with open("temp.db", "wb") as f:
-                    f.write(file.getbuffer())
-                conn = sqlite3.connect("temp.db")
-                df = pd.read_sql("SELECT * FROM water_quality", conn)
+    st.subheader("📂 Bulk Water Quality Scanner")
 
-            st.success("✅ Dataset Loaded")
-            st.dataframe(df.head())
+    sample_df = pd.DataFrame({
+        "DO":   [7.2, 6.8, 5.5],
+        "pH":   [7.1, 6.5, 8.2],
+        "ORP":  [210, 190, 170],
+        "Cond": [320, 300, 410],
+        "Temp": [26,  28,  30],
+        "WQI":  [75,  68,  55]
+    })
 
-            if st.button("Run Bulk Prediction"):
-                X = clean_dataset(df)
-                preds = model.predict(X)
+    # ===== 3 COLUMN CARD LAYOUT =====
+    c1, c2, c3 = st.columns(3)
 
-                result_df = X.copy()
-                result_df["Predicted Status"] = [STATUS_MAP.get(int(p), str(p)) for p in preds]
+    # ================= SAMPLE CARD =================
+    with c1:
+        st.markdown("#### 📥 Sample File")
 
-                for col in df.columns:
-                    if col not in result_df.columns:
-                        result_df[col] = df[col].values[:len(result_df)]
+        format_choice = st.selectbox(
+            "Format",
+            ["CSV", "Excel", "JSON", "SQLite"],
+            key="sample_format"
+        )
 
-                st.session_state.bulk_df = result_df
-                st.success("✅ Prediction Completed")
+        if st.button("Download", use_container_width=True):
 
-                st.markdown('<div class="insight-box"><b>Insight:</b> Overall water quality distribution after prediction.</div>',
-                            unsafe_allow_html=True)
+            if format_choice == "CSV":
+                st.download_button(
+                    "Download CSV",
+                    sample_df.to_csv(index=False).encode(),
+                    "sample.csv",
+                    use_container_width=True
+                )
 
-                fig = px.pie(result_df, names="Predicted Status",
-                             title="Water Quality Distribution",
-                             color="Predicted Status",
-                             color_discrete_map=STATUS_COLOR,
-                             hole=0.4)
-                fig = style_fig(fig)
-                fig.update_traces(textfont_size=14, textfont_family="Poppins",
-                                  textfont_color="#1a1a2e")
-                st.plotly_chart(fig, use_container_width=True, key=chart_key())
+            elif format_choice == "Excel":
+                from io import BytesIO
+                buffer = BytesIO()
+                sample_df.to_excel(buffer, index=False)
+                st.download_button(
+                    "Download Excel",
+                    buffer.getvalue(),
+                    "sample.xlsx",
+                    use_container_width=True
+                )
 
-                st.subheader("📋 Results Preview")
-                show_cols = MODEL_FEATURES + ["Predicted Status"]
-                extra = [c for c in result_df.columns if c not in show_cols]
-                st.dataframe(result_df[show_cols + extra].head(20), use_container_width=True)
+            elif format_choice == "JSON":
+                st.download_button(
+                    "Download JSON",
+                    sample_df.to_json(orient="records"),
+                    "sample.json",
+                    use_container_width=True
+                )
 
-                csv_bytes = result_df.to_csv(index=False).encode("utf-8")
-                st.download_button("⬇️ Download Results", csv_bytes,
-                                   "water_predictions.csv", "text/csv")
+            elif format_choice == "SQLite":
+                import sqlite3
+                conn = sqlite3.connect("sample.db")
+                sample_df.to_sql("water_quality", conn, if_exists="replace", index=False)
+                conn.close()
+                with open("sample.db", "rb") as f:
+                    st.download_button(
+                        "Download DB",
+                        f,
+                        "sample.db",
+                        use_container_width=True
+                    )
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+    # ================= GOOGLE DRIVE CARD =================
+    with c2:
+        st.markdown("#### 🔗 Google Drive")
+
+        import gdown, tempfile
+
+        drive_link = st.text_input("Paste Link", key="drive")
+
+        if st.button("Fetch", use_container_width=True):
+
+            try:
+                file_id = drive_link.split("/d/")[1].split("/")[0]
+                url = f"https://drive.google.com/uc?id={file_id}"
+
+                temp = tempfile.NamedTemporaryFile(delete=False)
+                gdown.download(url, temp.name, quiet=False)
+
+                df = pd.read_csv(temp.name)
+                st.session_state.uploaded_df = df
+
+                st.success("Loaded")
+            except:
+                st.error("Invalid Drive Link")
+
+    # ================= UPLOAD CARD =================
+    with c3:
+        st.markdown("#### 📤 Upload File")
+
+        file = st.file_uploader(
+            "CSV / Excel / JSON / DB",
+            type=["csv", "xlsx", "json", "db"],
+            label_visibility="collapsed"
+        )
+
+        if file:
+
+            try:
+                if file.name.endswith(".csv"):
+                    df = pd.read_csv(file)
+
+                elif file.name.endswith(".xlsx"):
+                    df = pd.read_excel(file)
+
+                elif file.name.endswith(".json"):
+                    df = pd.read_json(file)
+
+                elif file.name.endswith(".db"):
+                    import sqlite3
+                    with open("temp.db", "wb") as f:
+                        f.write(file.getbuffer())
+                    conn = sqlite3.connect("temp.db")
+                    df = pd.read_sql("SELECT * FROM water_quality", conn)
+
+                st.session_state.uploaded_df = df
+                st.success("Uploaded")
+
+            except:
+                st.error("File Error")
 
     st.markdown("---")
-    st.subheader("📊 Sample Dataset Format")
-    sample_format = pd.DataFrame({
-        "DO":   [7.2, 6.8, 5.5, 8.1, 4.9],
-        "pH":   [7.1, 6.5, 8.2, 7.8, 5.9],
-        "ORP":  [210, 190, 170, 230, 150],
-        "Cond": [320, 300, 410, 280, 450],
-        "Temp": [26,  28,  30,  25,  31],
-        "WQI":  [75,  68,  55,  82,  48]
-    })
-    st.dataframe(sample_format, use_container_width=True)
+
+    # ================= PREDICT BUTTON =================
+    if "uploaded_df" in st.session_state:
+
+        if st.button("🚀 Run Bulk Prediction", use_container_width=True):
+
+            df = st.session_state.uploaded_df
+
+            X = clean_dataset(df)
+            preds = model.predict(X)
+
+            result_df = X.copy()
+            result_df["Predicted Status"] = [
+                STATUS_MAP.get(int(p), str(p)) for p in preds
+            ]
+
+            st.session_state.bulk_df = result_df
+
+            st.success("Prediction Completed")
+
+            st.markdown("### 📋 Prediction Output Preview")
+
+            show_cols = MODEL_FEATURES + ["Predicted Status"]
+
+            st.dataframe(
+            result_df[show_cols].head(20),
+            use_container_width=True
+            )
+
+            fig = px.pie(
+                result_df,
+                names="Predicted Status",
+                hole=0.4,
+                color="Predicted Status",
+                color_discrete_map=STATUS_COLOR
+            )
+            fig = style_fig(fig)
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.download_button(
+                "⬇️ Download Result",
+                result_df.to_csv(index=False).encode(),
+                "result.csv",
+                use_container_width=True
+            )
 
 # ======================================================
 # ================= DASHBOARD ==========================
