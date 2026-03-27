@@ -207,6 +207,75 @@ button[kind="secondary"] {
 [data-testid="stFileUploader"] button:hover {
     background: linear-gradient(135deg, #0652dd, #023dd4) !important;
 }
+            /* ===== FORCE ALL BUTTON BACKGROUNDS (DARK MODE FIX) ===== */
+button {
+    background-color: white !important;
+    color: #1a1a2e !important;
+    border-radius: 8px !important;
+}
+
+/* Primary buttons (keep your gradient) */
+.stButton > button,
+button[kind="primary"] {
+    background: linear-gradient(135deg, #0984e3, #0652dd) !important;
+    color: white !important;
+}
+
+/* Secondary buttons */
+button[kind="secondary"] {
+    background-color: white !important;
+    color: #1a1a2e !important;
+    border: 2px solid #74b9ff !important;
+}
+
+/* Fix ANY unstyled buttons */
+button:not([style*="background"]) {
+    background-color: white !important;
+    color: #1a1a2e !important;
+}
+
+/* Fix download + uploader buttons */
+.stDownloadButton button,
+[data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg, #0984e3, #0652dd) !important;
+    color: white !important;
+}
+            /* ===== FIX SELECTBOX / DROPDOWN (DARK MODE FIX) ===== */
+
+/* Main selectbox container */
+div[data-baseweb="select"] > div {
+    background-color: white !important;
+    color: #1a1a2e !important;
+    border-radius: 8px !important;
+}
+
+/* Selected value text */
+div[data-baseweb="select"] span {
+    color: #1a1a2e !important;
+}
+
+/* Dropdown arrow icon */
+div[data-baseweb="select"] svg {
+    fill: #1a1a2e !important;
+}
+
+/* Dropdown menu popup */
+ul[role="listbox"] {
+    background-color: white !important;
+    color: #1a1a2e !important;
+}
+
+/* Each option */
+ul[role="listbox"] li {
+    background-color: white !important;
+    color: #1a1a2e !important;
+}
+
+/* Hover effect */
+ul[role="listbox"] li:hover {
+    background-color: #f1f9ff !important;
+    color: #0984e3 !important;
+}
 
 </style>
 """, unsafe_allow_html=True)
